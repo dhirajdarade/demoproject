@@ -1,0 +1,225 @@
+[
+  {
+    "tradeId": "IRS-BERM-2026-00457",
+    "tradeType": "InterestRateSwap",
+    "legs": [
+      "structuredLeg",
+      "fundingLeg",
+      "optionLeg"
+    ],
+    "periodCounts": [
+      3,
+      3,
+      3
+    ],
+    "periodNum": [
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3
+    ],
+    "startDate": [
+      "2026-09-09",
+      "2027-03-09",
+      "2027-09-09",
+      "2026-09-09",
+      "2026-12-09",
+      "2027-03-09",
+      null,
+      null,
+      null
+    ],
+    "endDate": [
+      "2027-03-09",
+      "2027-09-09",
+      "2028-03-09",
+      "2026-12-09",
+      "2027-03-09",
+      "2027-06-09",
+      null,
+      null,
+      null
+    ],
+    "paymentDate": [
+      "2027-03-09",
+      "2027-09-09",
+      "2028-03-09",
+      "2026-12-09",
+      "2027-03-09",
+      "2027-06-09",
+      null,
+      null,
+      null
+    ],
+    "notional": [
+      100000000,
+      100000000,
+      100000000,
+      100000000,
+      100000000,
+      100000000,
+      null,
+      null,
+      null
+    ],
+    "rate": [
+      0.0385,
+      0.0385,
+      0.0385,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "resetDate": [
+      null,
+      null,
+      null,
+      "2026-09-09",
+      "2026-12-09",
+      "2027-03-09",
+      null,
+      null,
+      null
+    ],
+    "spread": [
+      null,
+      null,
+      null,
+      0.0,
+      0.0,
+      0.0,
+      null,
+      null,
+      null
+    ],
+    "noticeDate": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "2029-09-04",
+      "2030-09-04",
+      "2031-09-04"
+    ],
+    "exerciseDate": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "2029-09-09",
+      "2030-09-09",
+      "2031-09-09"
+    ],
+    "effectiveTerminationDate": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "2029-09-09",
+      "2030-09-09",
+      "2031-09-09"
+    ],
+    "legDescriptions": [
+      "Fixed structured coupon leg paid by Client",
+      "Floating SOFR funding leg paid by Bank",
+      "Bermudan cancellation right held by Bank, coincides with structured-leg roll dates"
+    ]
+  },
+  {
+    "tradeId": "IRS-VAN-2026-00892",
+    "tradeType": "InterestRateSwap",
+    "legs": [
+      "structuredLeg",
+      "fundingLeg"
+    ],
+    "periodCounts": [
+      3,
+      3
+    ],
+    "periodNum": [
+      1,
+      2,
+      3,
+      1,
+      2,
+      3
+    ],
+    "startDate": [
+      "2026-06-15",
+      "2026-12-15",
+      "2027-06-15",
+      "2026-06-15",
+      "2026-09-15",
+      "2026-12-15"
+    ],
+    "endDate": [
+      "2026-12-15",
+      "2027-06-15",
+      "2027-12-15",
+      "2026-09-15",
+      "2026-12-15",
+      "2027-03-15"
+    ],
+    "paymentDate": [
+      "2026-12-15",
+      "2027-06-15",
+      "2027-12-15",
+      "2026-09-15",
+      "2026-12-15",
+      "2027-03-15"
+    ],
+    "notional": [
+      50000000,
+      50000000,
+      50000000,
+      50000000,
+      50000000,
+      50000000
+    ],
+    "rate": [
+      0.041,
+      0.041,
+      0.041,
+      null,
+      null,
+      null
+    ],
+    "resetDate": [
+      null,
+      null,
+      null,
+      "2026-06-15",
+      "2026-09-15",
+      "2026-12-15"
+    ],
+    "spread": [
+      null,
+      null,
+      null,
+      0.0015,
+      0.0015,
+      0.0015
+    ],
+    "noticeDate": null,
+    "exerciseDate": null,
+    "effectiveTerminationDate": null,
+    "legDescriptions": [
+      "Fixed structured coupon leg paid by Client",
+      "Floating SOFR + spread funding leg paid by Bank"
+    ]
+  }
+]
