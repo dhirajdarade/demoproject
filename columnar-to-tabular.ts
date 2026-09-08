@@ -5,7 +5,7 @@
  *
  * Instead of hardcoding field names, the shape of the record is described
  * by a TierSchema. Each tier is one "grain" (header grain, leg grain, leaf
- * grain, ...). explodeTrades() walks the schema generically, so adding a
+ * grain, ...). explodeRecordArray() walks the schema generically, so adding a
  * new grain (e.g. inserting a "portfolio" tier above "trade", or a new
  * grain below "leg") is a config change, not a code change.
  *
@@ -159,7 +159,7 @@ export function warnIfSchemaViolated(record: SchemaRecord, schema: TierSchema): 
     const tier = tiers[i];
     for (const f of tier.fields) {
       if (!(f in record)) {
-        console.warn(`[explodeTrades] Trade ${record.tradeId ?? '(unknown)'}: missing expected field "${f}" declared on tier "${tier.tierName}".`);
+        console.warn(`[explodeRecordArray] Trade ${record.tradeId ?? '(unknown)'}: missing expected field "${f}" declared on tier "${tier.tierName}".`);
       }
     }
 
@@ -173,7 +173,7 @@ export function warnIfSchemaViolated(record: SchemaRecord, schema: TierSchema): 
           const actualNextLength = record[nextReferenceField].length;
           if (actualNextLength !== expectedNextLength) {
             console.warn(
-              `[explodeTrades] Trade ${record.tradeId ?? '(unknown)'}: hinge "${tier.hingeField}" ` +
+              `[explodeRecordArray] Trade ${record.tradeId ?? '(unknown)'}: hinge "${tier.hingeField}" ` +
                 `sums to ${expectedNextLength} but tier "${nextTier.tierName}" field "${nextReferenceField}" has length ${actualNextLength}.`
             );
           }
@@ -187,7 +187,7 @@ export function warnIfSchemaViolated(record: SchemaRecord, schema: TierSchema): 
  * Flattens an array of schema-conforming records (e.g. a full API response)
  * into one flat tabular row array.
  */
-export function explodeTrades(
+export function explodeRecordArray(
   records: SchemaRecord[],
   schema: TierSchema = TRADE_TIER_SCHEMA,
   { devCheck = true }: { devCheck?: boolean } = {}
@@ -196,4 +196,145 @@ export function explodeTrades(
     records.forEach((r) => warnIfSchemaViolated(r, schema));
   }
   return records.flatMap((r) => explodeRecord(r, schema));
+}
+
+/**
+ * WIDE FLATTEN: unlike explodeRecord (1 record -> N rows), this flattens
+ * 1 record -> 1 row, denormalizing every array-tier entry into its own
+ * index-suffixed column instead of a new row.
+ *
+ * Suffix convention: a field's column name gets one numeric suffix per
+ * array-tier ancestor (1-based, human-friendly), in outermost-to-innermost
+ * order. E.g. with tiers [trade(scalar) -> leg(array) -> period(array)]:
+ *   - leg-tier fields   => legs_1, legs_2, legDescriptions_1, ...
+ *   - period-tier fields => periodNum_1_1, periodNum_1_2, ..., periodNum_2_1, ...
+ *     (first index = leg position, second index = period position within that leg)
+ *
+ * CAVEAT: because different trades can have different leg/period counts,
+ * wide-flattened rows across a batch will NOT share an identical key set
+ * (trade1 might have keys up through `_3_40`, trade2 only through `_2_6`).
+ * This is inherent to wide-flattening ragged data — a grid consuming this
+ * output needs to compute the union of columns across ALL rows (unlike
+ * explodeRecordArray, where the confirmed backend contract let us skip that).
+ * Sparse cells should render blank, not be treated as a schema violation.
+ */
+export function flattenRecord(record: SchemaRecord, schema: TierSchema): TabularRow {
+  const { tiers } = schema;
+  const output: TabularRow = {};
+  const offsets = new Array(tiers.length).fill(0);
+
+  function walkScalarTiers(tierIdx: number): void {
+    if (tierIdx >= tiers.length) return;
+    const tier = tiers[tierIdx];
+    if (tier.cardinality === 'scalar') {
+      for (const f of tier.fields) output[f] = record[f] ?? null;
+      walkScalarTiers(tierIdx + 1);
+    } else {
+      const referenceField = tier.fields.find((f) => Array.isArray(record[f]));
+      const entryCount = referenceField ? record[referenceField].length : 0;
+      walkArrayTier(tierIdx, entryCount, []);
+    }
+  }
+
+  function walkArrayTier(tierIdx: number, entryCount: number, indices: number[]): void {
+    const tier = tiers[tierIdx];
+    const isLeaf = tierIdx === tiers.length - 1;
+    const startOffset = offsets[tierIdx];
+
+    for (let i = 0; i < entryCount; i++) {
+      const idx = startOffset + i;
+      const newIndices = [...indices, i + 1]; // 1-based suffixes
+
+      for (const f of tier.fields) {
+        const value = readFieldAt(record, f, idx);
+        output[`${f}_${newIndices.join('_')}`] = value;
+      }
+
+      if (!isLeaf) {
+        const hingeArray = tier.hingeField ? record[tier.hingeField] : undefined;
+        const childCount = Array.isArray(hingeArray) ? hingeArray[idx] ?? 0 : 0;
+        walkArrayTier(tierIdx + 1, childCount, newIndices);
+      }
+    }
+    offsets[tierIdx] += entryCount;
+  }
+
+  walkScalarTiers(0);
+  return output;
+}
+
+/** Wide-flattens an array of records: one output row per input trade (not per period). */
+export function flattenRecordArray(
+  records: SchemaRecord[],
+  schema: TierSchema = TRADE_TIER_SCHEMA
+): TabularRow[] {
+  return records.map((r) => flattenRecord(r, schema));
+}
+
+/**
+ * Computes the union of keys across a set of wide-flattened rows, in the
+ * order first encountered. Needed before binding wide-flattened output to
+ * a grid, since (unlike explodeRecordArray output) row key sets can legitimately
+ * differ per trade.
+ */
+export function unionColumns(rows: TabularRow[]): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (!seen.has(key)) {
+        seen.add(key);
+        ordered.push(key);
+      }
+    }
+  }
+  return ordered;
+}
+
+/**
+ * True if `field` is null/undefined for every trade in the batch — either
+ * as a scalar (degenerate column, doesn't apply to that trade at all) or as
+ * an array whose every element is null/undefined. Scans the RAW columnar
+ * arrays directly (not exploded rows), so a value is inspected exactly
+ * once regardless of how many output rows it would eventually contribute to.
+ */
+function isFullyNullAcrossRecords(records: SchemaRecord[], field: string): boolean {
+  for (const record of records) {
+    const value = record[field];
+    if (Array.isArray(value)) {
+      if (value.some((v) => v !== null && v !== undefined)) return false;
+    } else if (value !== null && value !== undefined) {
+      return false; // non-null scalar => field is genuinely used by this trade
+    }
+  }
+  return true;
+}
+
+/**
+ * Returns a pruned copy of the schema with fully-null fields removed from
+ * each tier's `fields` list, based on scanning the WHOLE batch (never a
+ * single trade in isolation — pruning per-trade would reintroduce the
+ * "columns shift depending on trade order" bug that explodeRecordArray's
+ * consistent-key-set guarantee exists to prevent).
+ *
+ * A tier's `hingeField` is never pruned, even if its values happen to all
+ * be zero/null — it's structural (drives row counts for the next tier),
+ * not a data column, so its "null-ness" isn't a usage signal.
+ *
+ * Run this once per fetched batch, BEFORE explodeRecordArray/flattenRecordArray
+ * — pruning first means the flattener never allocates or writes the dropped
+ * keys at all, rather than writing them and having a caller filter them out
+ * afterward.
+ */
+export function pruneFullyNullFields(records: SchemaRecord[], schema: TierSchema): TierSchema {
+  if (records.length === 0) return schema;
+
+  return {
+    tiers: schema.tiers.map((tier) => ({
+      ...tier,
+      fields: tier.fields.filter(
+        (f) => f === tier.hingeField || !isFullyNullAcrossRecords(records, f)
+      ),
+    })),
+  };
 }
